@@ -14,19 +14,26 @@
 - 🔒 **API Key 本地存储** — 不上传任何远程服务
 - 🔍 **自动检测 claude 路径** — 无需手动配置
 
-## 安装
+## 一键安装
 
 ```bash
+# 推荐：curl 安装，自动同步当前模型
+bash <(curl -fsSL https://raw.githubusercontent.com/dongdada29/cc-profiles/main/install.sh)
+
+# 或 git clone
 git clone https://github.com/dongdada29/cc-profiles.git
 cd cc-profiles && bash install.sh
 ```
 
-或手动：
+安装后自动完成：
+1. 安装 `cc-profiles` 到 `~/.local/bin`
+2. 配置 shell rc（zsh/bash 自动检测）
+3. 从当前 `settings.json` 同步第一个 profile
+4. source 后即可使用 alias 启动
 
 ```bash
-# 加到 shell rc
-echo 'source /path/to/cc-profiles/cc-profiles.sh' >> ~/.zshrc
 source ~/.zshrc
+cc-profiles list    # 看已同步的模型
 ```
 
 ## 快速开始
