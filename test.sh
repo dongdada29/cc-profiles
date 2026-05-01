@@ -17,19 +17,18 @@ assert() {
   fi
 }
 
-# Setup: use temp dir
 export CC_PROFILES_DIR=$(mktemp -d)
 export CC_PROFILES_CONF="$CC_PROFILES_DIR/profiles.json"
 
-echo "🧪 Testing cc-profiles v0.2.0"
+echo "🧪 Testing cc-profiles v1.0.0"
 echo ""
 
-# Test 1: init creates config
+# 1. Init
 echo "1. Init"
 source "$SCRIPT" 2>/dev/null || true
 assert "creates profiles.json" "{}" "$(cat "$CC_PROFILES_CONF" 2>/dev/null)"
 
-# Test 2: batch import
+# 2. Batch
 echo "2. Batch"
 cc-profiles batch << 'TSV'
 glm|GLM-5.1|https://open.bigmodel.cn/api/anthropic|glm-key-123|glm-5.1
@@ -41,41 +40,47 @@ assert "batch adds glm" "glm" "$out"
 assert "batch adds deepseek" "deepseek" "$out"
 assert "batch adds mimo" "mimo" "$out"
 
-# Test 3: add profile (non-interactive via batch)
+# 3. Single batch add
 echo "3. Add"
 echo "test1|Test Model|https://api.test.com|test-key-123|test-v1" | cc-profiles batch 2>&1
 out=$(cc-profiles list 2>&1)
-assert "shows test1 profile" "test1" "$out"
-assert "shows model name" "test-v1" "$out"
+assert "shows test1" "test1" "$out"
+assert "shows test-v1" "test-v1" "$out"
 
-# Test 4: aliases generation
+# 4. Aliases
 echo "4. Aliases"
 out=$(cc-profiles aliases 2>&1)
-assert "generates cglm alias" "cglm" "$out"
+assert "generates cglm" "cglm" "$out"
 assert "includes model" "glm-5.1" "$out"
 
-# Test 5: use (set default)
+# 5. Use
 echo "5. Use"
 cc-profiles use glm 2>/dev/null
-out=$(cc-profiles list 2>&1)
-assert "marks glm as default" "default" "$out"
+out=$(cc-profiles current 2>&1)
+assert "marks glm as default" "glm" "$out"
 
-# Test 6: remove
+# 6. Remove
 echo "6. Remove"
 cc-profiles remove mimo 2>&1
 out=$(cc-profiles list 2>&1)
 assert "removes mimo" "" "$(echo "$out" | grep -co "mimo" || echo "0")"
 
-# Test 7: batch from file with comments and empty lines
+# 7. Batch from file
 echo "7. Batch from file"
 cat > "$CC_PROFILES_DIR/import.tsv" << 'TSV'
-# comments are skipped
+# comments skipped
 qwen|Qwen-3|https://api.qwen.com|qwen-key|qwen-3-72b
 
 TSV
 cc-profiles batch "$CC_PROFILES_DIR/import.tsv" 2>&1
 out=$(cc-profiles list 2>&1)
-assert "batch from file adds qwen" "qwen" "$out"
+assert "adds qwen" "qwen" "$out"
+
+# 8. Special chars in values (injection test)
+echo "8. Injection safety"
+echo 'hack|Test "injection"|https://evil.com|key-with-"quotes"|model'"'"'s-name' | cc-profiles batch 2>&1
+out=$(cc-profiles list 2>&1)
+assert "handles special chars" "hack" "$out"
 
 # Cleanup
 rm -rf "$CC_PROFILES_DIR"

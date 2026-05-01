@@ -16,7 +16,7 @@ detect_rc() {
   fi
 }
 
-# ─── Install script ───────────────────────────────────────
+# ─── Install ──────────────────────────────────────────────
 do_install() {
   mkdir -p "$TARGET_DIR"
   cp "$SCRIPT_DIR/cc-profiles.sh" "$TARGET_DIR/cc-profiles"
@@ -24,13 +24,11 @@ do_install() {
 
   detect_rc
 
-  # Ensure ~/.local/bin in PATH
   if ! grep -q '.local/bin' "$SHELL_RC" 2>/dev/null; then
     echo '' >> "$SHELL_RC"
     echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_RC"
   fi
 
-  # Add auto-load line
   if ! grep -q 'cc-profiles aliases' "$SHELL_RC" 2>/dev/null; then
     echo '' >> "$SHELL_RC"
     echo '# cc-profiles - Claude Code multi-model manager' >> "$SHELL_RC"
@@ -40,12 +38,11 @@ do_install() {
   echo -e "${C_G}✔${C_X} Installed to $TARGET_DIR/cc-profiles"
   echo -e "${C_G}✔${C_X} Shell config updated ($SHELL_RC)"
 
-  # Install zsh completions
+  # Zsh completions
   if [ -n "$ZSH_VERSION" ] || [[ "$SHELL" == */zsh ]]; then
     local zfunc="$HOME/.zfunc"
     mkdir -p "$zfunc"
     cp "$SCRIPT_DIR/completions/_cc-profiles" "$zfunc/_cc-profiles" 2>/dev/null || true
-    # Ensure fpath includes ~/.zfunc
     if ! grep -q 'fpath.*\.zfunc' "$SHELL_RC" 2>/dev/null; then
       echo 'fpath+=(~/.zfunc)' >> "$SHELL_RC"
     fi
@@ -56,7 +53,7 @@ do_install() {
   fi
 }
 
-# ─── Sync first profile from settings.json ───────────────
+# ─── Sync first profile ──────────────────────────────────
 do_init() {
   local settings="$HOME/.claude/settings.json"
   if [[ ! -f "$settings" ]]; then
@@ -65,42 +62,45 @@ do_init() {
     return
   fi
 
-  local base_url api_key model
-  base_url=$(python3 -c "import json; d=json.load(open('$settings')); print(d.get('env',{}).get('ANTHROPIC_BASE_URL',''))" 2>/dev/null)
-  api_key=$(python3 -c "import json; d=json.load(open('$settings')); print(d.get('env',{}).get('ANTHROPIC_AUTH_TOKEN','') or d.get('env',{}).get('ANTHROPIC_API_KEY',''))" 2>/dev/null)
-  model=$(python3 -c "import json; d=json.load(open('$settings')); print(d.get('env',{}).get('ANTHROPIC_MODEL',''))" 2>/dev/null)
+  # Use python3 to safely read and write (no injection risk)
+  python3 - "$settings" "$HOME/.claude/profiles/profiles.json" << 'PYEOF'
+import json, os, sys, re
 
-  if [[ -z "$model" ]]; then
-    echo -e "${C_Y}⚠${C_X} No model config in settings.json, skip sync"
-    return
-  fi
+settings_path = sys.argv[1]
+profiles_path = sys.argv[2]
 
-  # Auto-guess a key name from model
-  local key
-  key=$(echo "$model" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/_/g' | cut -c1-20 | sed 's/_$//')
+s = json.load(open(settings_path))
+env = s.get("env", {})
+base_url = env.get("ANTHROPIC_BASE_URL", "")
+api_key = env.get("ANTHROPIC_AUTH_TOKEN", "") or env.get("ANTHROPIC_API_KEY", "")
+model = env.get("ANTHROPIC_MODEL", "")
 
-  local conf="$HOME/.claude/profiles/profiles.json"
-  mkdir -p "$(dirname "$conf")"
+if not model:
+    print("⚠ No model config in settings.json, skip sync")
+    sys.exit(0)
 
-  python3 << PYEOF
-import json, os
-conf = "$conf"
-if os.path.exists(conf):
-    d = json.load(open(conf))
+# Generate safe key from model name
+key = re.sub(r'[^a-z0-9]', '_', model.lower())[:20].rstrip('_')
+
+os.makedirs(os.path.dirname(profiles_path), exist_ok=True)
+
+if os.path.exists(profiles_path):
+    d = json.load(open(profiles_path))
 else:
     d = {"current": "", "profiles": {}}
-d["current"] = "$key"
-d["profiles"]["$key"] = {
-    "name": "$model",
-    "base_url": "$base_url",
-    "api_key": "$api_key",
-    "model": "$model"
-}
-json.dump(d, open(conf, "w"), indent=2, ensure_ascii=False)
-PYEOF
 
-  echo -e "${C_G}✔${C_X} Synced current model: $model → profile '$key'"
-  echo -e "  alias: ${C_B}c${key}${C_X}"
+d["current"] = key
+d["profiles"][key] = {
+    "name": model,
+    "base_url": base_url,
+    "api_key": api_key,
+    "model": model
+}
+json.dump(d, open(profiles_path, "w"), indent=2, ensure_ascii=False)
+
+print(f"✔ Synced current model: {model} → profile '{key}'")
+print(f"  alias: c{key}")
+PYEOF
 }
 
 # ─── Uninstall ────────────────────────────────────────────
@@ -108,7 +108,6 @@ do_uninstall() {
   rm -f "$TARGET_DIR/cc-profiles"
   rm -f "$HOME/.zfunc/_cc-profiles"
   detect_rc
-  # Remove cc-profiles lines from shell rc
   if [[ -f "$SHELL_RC" ]]; then
     sed -i.bak '/cc-profiles/d' "$SHELL_RC" 2>/dev/null || true
     rm -f "$SHELL_RC.bak"
@@ -126,11 +125,13 @@ case "${1:-install}" in
     echo ""
     do_init
     echo ""
+    detect_rc
     echo -e "${C_B}Next:${C_X}"
     echo -e "  1. source $SHELL_RC"
     echo -e "  2. cc-profiles list           # see your profiles"
     echo -e "  3. cc-profiles batch file.tsv # add more models"
-    echo -e "  4. c${key:-glm}                 # launch! 🚀"
+    echo -e "  4. cc-profiles test glm       # test connectivity"
+    echo -e "  5. cglm                       # launch! 🚀"
     ;;
   uninstall)
     do_uninstall
