@@ -1,0 +1,70 @@
+#compdef cc-profiles
+# zsh completion for cc-profiles
+# Install: cp _cc-profiles ~/.zfunc/ or fpath+=(~/.zfunc)
+
+_cc-profiles() {
+  local -a commands profiles
+  commands=(
+    'list:List all profiles'
+    'ls:List all profiles'
+    'sync:Sync current settings.json as a profile'
+    'batch:Batch import from TSV'
+    'add:Add a new profile interactively'
+    'remove:Remove a profile'
+    'rm:Remove a profile'
+    'use:Set default profile'
+    'edit:Open profiles.json in $EDITOR'
+    'aliases:Print alias commands'
+    'version:Show version'
+    'help:Show help'
+  )
+
+  local conf="$HOME/.claude/profiles/profiles.json"
+  if [[ -f "$conf" ]]; then
+    profiles=("${(@f)$(python3 -c "
+import json
+d = json.load(open('$conf'))
+for k, v in d.get('profiles', {}).items():
+    print(f'{k}:{v.get(\"name\",\"\")}')
+" 2>/dev/null)}")
+  fi
+
+  _arguments -C \
+    '1: :->cmd' \
+    '2: :->arg' && return
+
+  case $state in
+    cmd)
+      _describe 'command' commands
+      if (( ${#profiles} )); then
+        local -a profile_names
+        for p in $profiles; do
+          local key="${p%%:*}"
+          local val="${p#*:}"
+          profile_names+=("$key:$val")
+        done
+        _describe 'profile' profile_names
+      fi
+      ;;
+    arg)
+      case $words[2] in
+        remove|rm|use)
+          if (( ${#profiles} )); then
+            local -a profile_names
+            for p in $profiles; do
+              local key="${p%%:*}"
+              local val="${p#*:}"
+              profile_names+=("$key:$val")
+            done
+            _describe 'profile' profile_names
+          fi
+          ;;
+        batch)
+          _files
+          ;;
+      esac
+      ;;
+  esac
+}
+
+_cc-profiles "$@"

@@ -39,6 +39,21 @@ do_install() {
 
   echo -e "${C_G}✔${C_X} Installed to $TARGET_DIR/cc-profiles"
   echo -e "${C_G}✔${C_X} Shell config updated ($SHELL_RC)"
+
+  # Install zsh completions
+  if [ -n "$ZSH_VERSION" ] || [[ "$SHELL" == */zsh ]]; then
+    local zfunc="$HOME/.zfunc"
+    mkdir -p "$zfunc"
+    cp "$SCRIPT_DIR/completions/_cc-profiles" "$zfunc/_cc-profiles" 2>/dev/null || true
+    # Ensure fpath includes ~/.zfunc
+    if ! grep -q 'fpath.*\.zfunc' "$SHELL_RC" 2>/dev/null; then
+      echo 'fpath+=(~/.zfunc)' >> "$SHELL_RC"
+    fi
+    if ! grep -q 'autoload -Uz compinit && compinit' "$SHELL_RC" 2>/dev/null; then
+      echo 'autoload -Uz compinit && compinit' >> "$SHELL_RC"
+    fi
+    echo -e "${C_G}✔${C_X} Zsh completions installed (~/.zfunc/_cc-profiles)"
+  fi
 }
 
 # ─── Sync first profile from settings.json ───────────────
@@ -91,6 +106,7 @@ PYEOF
 # ─── Uninstall ────────────────────────────────────────────
 do_uninstall() {
   rm -f "$TARGET_DIR/cc-profiles"
+  rm -f "$HOME/.zfunc/_cc-profiles"
   detect_rc
   # Remove cc-profiles lines from shell rc
   if [[ -f "$SHELL_RC" ]]; then
